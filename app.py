@@ -15,6 +15,18 @@ from openai import OpenAI
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
 
+
+def _extract_h1_title(markdown_text: str) -> str:
+    """Return the first markdown H1 title without the leading '# '."""
+    for line in (markdown_text or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        if s.startswith("# "):
+            return s[2:].strip()
+        break
+    return ""
+
 # ---------------------------------------------------------------------------
 # GSC CSV parser
 # ---------------------------------------------------------------------------
@@ -798,6 +810,7 @@ if st.session_state.get("processing"):
                     st.session_state["total_input_tok"]  += usage_r["input_tokens"]
                     st.session_state["total_output_tok"] += usage_r["output_tokens"]
 
+                    rewritten_title = _extract_h1_title(rewritten) or post.get("title", url)
                     new_word_count = len(rewritten.split())
                     output_dir.joinpath(f"{post['slug']}-rewritten.md").write_text(rewritten, encoding="utf-8")
 
@@ -806,7 +819,7 @@ if st.session_state.get("processing"):
 
                     st.session_state["results"].append({
                         "url": url,
-                        "title": post["title"],
+                        "title": rewritten_title,
                         "slug": post["slug"],
                         "word_count_before": post["word_count"],
                         "word_count_after": new_word_count,
@@ -818,7 +831,7 @@ if st.session_state.get("processing"):
                     })
 
                     status.update(
-                        label=f"Done: {post['title'] or url}  ({post['word_count']} → {new_word_count} words)",
+                        label=f"Done: {rewritten_title or url}  ({post['word_count']} → {new_word_count} words)",
                         state="complete",
                         expanded=False,
                     )

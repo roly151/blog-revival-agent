@@ -10,6 +10,7 @@ ANALYSIS_PROMPT = """You are an SEO content auditor. Analyze this blog post and 
 
 Return exactly this structure:
 {{
+  "recommended_title": "a stronger SEO title for this post",
   "thin_sections": ["list of H2 heading texts where the section content is under 150 words"],
   "outdated_claims": ["exact sentences or phrases that appear outdated, reference old stats, or use vague 'recently' language"],
   "missing_internal_links": ["topics or keywords mentioned in the post that match available site pages"],
@@ -17,6 +18,13 @@ Return exactly this structure:
   "overall_word_count": {word_count},
   "verdict": "thin"
 }}
+
+recommended_title rules:
+- Keep the exact topic and intent of the original post (no bait-and-switch)
+- Make it more specific and compelling (clear promise, fewer generic words)
+- Aim for ~45-65 characters (good for SERP display)
+- Match the author's tone (casual vs formal)
+- Do not add a year unless it is truly central to the post
 
 Verdict must be one of: "thin" (under 800 words or sparse), "average" (800-1200 words), "good" (1200+ words with depth).
 
@@ -33,6 +41,11 @@ Return only the JSON object."""
 
 
 REWRITE_PROMPT = """You are an expert SEO content writer. Rewrite the blog post below following every rule in this brief exactly.
+
+TITLE (important):
+- Use the recommended title below as the H1 (# ...) if it is provided
+- If it's blank or unusable, keep the original title
+- Do not change the topic, audience, or promise of the article
 
 TONE & VOICE (critical — do this first):
 - Read the original post carefully and identify the author's tone: casual or formal, technical or plain-English, use of "you" or third-person, sentence length, vocabulary level, use of humour or directness
@@ -75,6 +88,9 @@ OUTPUT FORMAT:
 - Do not add any text before or after the post content
 
 ORIGINAL TITLE: {title}
+
+RECOMMENDED TITLE (use this as the H1 if provided):
+{recommended_title}
 
 AUDIT FINDINGS:
 {audit}
@@ -203,6 +219,7 @@ def analyze_post(
         return json.loads(raw), usage
     except json.JSONDecodeError:
         audit = {
+            "recommended_title": post.get("title", "Untitled"),
             "thin_sections": [],
             "outdated_claims": [],
             "missing_internal_links": [],
@@ -226,8 +243,10 @@ def rewrite_post(
     Second pass: produce a fully rewritten post as markdown.
     Returns (markdown_string, usage_dict).
     """
+    recommended_title = str(audit.get("recommended_title", "")).strip()
     prompt = REWRITE_PROMPT.format(
         title=post.get("title", "Untitled"),
+        recommended_title=recommended_title,
         audit=json.dumps(audit, indent=2),
         site_pages=_format_site_pages(site_pages, domain),
         body_text=post.get("body_text", "")[:8000],

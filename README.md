@@ -1,4 +1,4 @@
-# Blog Content Revival Agent
+# Blog Content Revival Agent - Updated to use an Open Router api key and model of your choice
 
 **Built by [AI Ranking](https://skool.com/ai-ranking) — free to use and modify.**
 
