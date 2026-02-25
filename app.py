@@ -1,4 +1,5 @@
 import io
+import os
 import zipfile
 from pathlib import Path
 
@@ -9,7 +10,10 @@ from content_fetcher import fetch_post
 from rewriter import analyze_post, rewrite_post
 from sitemap_crawler import get_site_pages
 
-import anthropic
+from openai import OpenAI
+
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
+DEFAULT_OPENROUTER_MODEL = "openai/gpt-4o-mini"
 
 # ---------------------------------------------------------------------------
 # GSC CSV parser
@@ -551,8 +555,8 @@ st.markdown("""
     Google-ready content using the capsule content technique.
   </div>
   <div class="stat-row">
-    <div class="stat-pill"><strong>2-pass</strong> Claude analysis</div>
-    <div class="stat-pill"><strong>claude-sonnet-4-6</strong></div>
+    <div class="stat-pill"><strong>2-pass</strong> OpenRouter analysis</div>
+    <div class="stat-pill"><strong>User-selected model</strong></div>
     <div class="stat-pill">Capsule content optimised</div>
     <div class="stat-pill">Auto sitemap discovery</div>
   </div>
@@ -574,6 +578,8 @@ if "proc_domain" not in st.session_state:
     st.session_state["proc_domain"] = ""
 if "proc_api_key" not in st.session_state:
     st.session_state["proc_api_key"] = ""
+if "proc_model" not in st.session_state:
+    st.session_state["proc_model"] = DEFAULT_OPENROUTER_MODEL
 if "proc_site_pages" not in st.session_state:
     st.session_state["proc_site_pages"] = []
 if "total_urls" not in st.session_state:
@@ -595,14 +601,25 @@ with st.form("revival_form"):
     col1, col2 = st.columns([1, 1], gap="large")
 
     with col1:
+        default_api_key = st.session_state["proc_api_key"] or os.getenv("OPENROUTER_API_KEY", "")
+        default_model = st.session_state["proc_model"] or os.getenv("OPENROUTER_MODEL", DEFAULT_OPENROUTER_MODEL)
+
         domain = st.text_input(
             "Website domain",
             placeholder="https://example.com",
             help="Your site's base URL — used to discover your sitemap for internal link suggestions.",
         )
         api_key = st.text_input(
-            "Anthropic API key",
+            "OpenRouter API key",
             type="password",
+            value=default_api_key,
+            placeholder="sk-or-v1-...",
+            help="Get this from openrouter.ai/keys. Stored in this browser session only.",
+        )
+        model = st.text_input(
+            "OpenRouter model",
+            value=default_model,
+            placeholder="openai/gpt-4o-mini",
             help="Stored in this browser session only. Never written to disk.",
         )
 
@@ -636,7 +653,9 @@ if submitted:
     if not domain.strip():
         errors.append("Please enter your website domain.")
     if not api_key.strip():
-        errors.append("Please enter your Anthropic API key.")
+        errors.append("Please enter your OpenRouter API key.")
+    if not model.strip():
+        errors.append("Please enter an OpenRouter model (e.g. openai/gpt-4o-mini).")
     for err in errors:
         st.error(err)
     if errors:
@@ -658,9 +677,9 @@ if submitted:
         st.stop()
 
     try:
-        anthropic.Anthropic(api_key=api_key.strip())
+        OpenAI(base_url=OPENROUTER_BASE_URL, api_key=api_key.strip())
     except Exception as e:
-        st.error(f"Failed to initialize Anthropic client: {e}")
+        st.error(f"Failed to initialize OpenRouter client: {e}")
         st.stop()
 
     # ── Step 1: Sitemap ─────────────────────────────────────────────────
@@ -689,6 +708,7 @@ if submitted:
     st.session_state["processing"] = True
     st.session_state["proc_domain"] = domain.strip()
     st.session_state["proc_api_key"] = api_key.strip()
+    st.session_state["proc_model"] = model.strip()
     st.session_state["proc_site_pages"] = site_pages
     st.session_state["total_cost_usd"] = 0.0
     st.session_state["total_input_tok"] = 0
@@ -734,7 +754,11 @@ if st.session_state.get("processing"):
     if queue:
         url    = queue.pop(0)
         domain = st.session_state["proc_domain"]
-        client = anthropic.Anthropic(api_key=st.session_state["proc_api_key"])
+        model = st.session_state["proc_model"]
+        client = OpenAI(
+            base_url=OPENROUTER_BASE_URL,
+            api_key=st.session_state["proc_api_key"],
+        )
         site_pages = st.session_state["proc_site_pages"]
 
         output_dir = Path("output")
@@ -758,7 +782,7 @@ if st.session_state.get("processing"):
 
                 st.write("Running SEO audit (pass 1 of 2)...")
                 try:
-                    audit, usage_a = analyze_post(post, site_pages, client, domain=domain)
+                    audit, usage_a = analyze_post(post, site_pages, client, model=model, domain=domain)
                     st.session_state["total_cost_usd"]   += usage_a["cost_usd"]
                     st.session_state["total_input_tok"]  += usage_a["input_tokens"]
                     st.session_state["total_output_tok"] += usage_a["output_tokens"]
@@ -769,7 +793,7 @@ if st.session_state.get("processing"):
                     st.write(f"Audit done — verdict: **{verdict}** · {thin_count} thin section(s) · {missing_int} link gap(s)")
 
                     st.write("Rewriting with capsule content technique (pass 2 of 2)...")
-                    rewritten, usage_r = rewrite_post(post, audit, site_pages, client, domain=domain)
+                    rewritten, usage_r = rewrite_post(post, audit, site_pages, client, model=model, domain=domain)
                     st.session_state["total_cost_usd"]   += usage_r["cost_usd"]
                     st.session_state["total_input_tok"]  += usage_r["input_tokens"]
                     st.session_state["total_output_tok"] += usage_r["output_tokens"]

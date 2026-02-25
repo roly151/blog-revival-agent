@@ -1,4 +1,4 @@
-anthropic>=0.40.0
+openai>=1.55.0
 streamlit>=1.32.0
 requests>=2.31.0
 beautifulsoup4>=4.12.0

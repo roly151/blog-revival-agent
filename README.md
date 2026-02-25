@@ -17,7 +17,7 @@ Each rewrite includes:
 
 👉 **[Open the tool here](https://your-app.streamlit.app)** ← *(replace with your Streamlit Cloud URL)*
 
-You just need an Anthropic API key. The tool runs in your browser — nothing is installed on your computer.
+You just need an OpenRouter API key and model name. The tool runs in your browser — nothing is installed on your computer.
 
 ---
 
@@ -64,17 +64,17 @@ Your browser will open automatically at `http://localhost:8501`.
 
 ---
 
-## Getting your Anthropic API key
+## Getting your OpenRouter API key
 
-The tool uses Claude AI to rewrite your posts. You pay Anthropic directly for what you use — typically **$0.02–0.05 per post**. There's no subscription.
+The tool uses OpenRouter so you can pick any supported model (OpenAI, Anthropic, Google, etc). You pay based on the model you choose.
 
-1. Go to [console.anthropic.com](https://console.anthropic.com)
+1. Go to [openrouter.ai](https://openrouter.ai)
 2. Sign up or log in
-3. Click **API Keys** in the left sidebar
+3. Open [openrouter.ai/keys](https://openrouter.ai/keys)
 4. Click **Create Key**, give it a name, copy it
-5. Paste it into the tool when prompted
+5. Paste it into the tool, then set your model (example: `openai/gpt-4o-mini`)
 
-Your key is only stored in your browser session — it's never saved to disk or sent anywhere except Anthropic's API.
+Your key is only stored in your browser session — it's never saved to disk or sent anywhere except OpenRouter's API.
 
 ---
 
@@ -93,12 +93,13 @@ That CSV is what you drop into the tool.
 
 1. Enter your website domain (e.g. `https://myblog.com`)
 2. Upload your GSC CSV export, or paste URLs manually
-3. Paste your Anthropic API key
-4. Click **Run Analysis & Rewrite**
+3. Paste your OpenRouter API key
+4. Enter the OpenRouter model you want to use
+5. Click **Run Analysis & Rewrite**
 
 The tool will:
 - Fetch each post
-- Run a 2-pass Claude analysis (audit then rewrite)
+- Run a 2-pass OpenRouter analysis (audit then rewrite)
 - Show you a live cost counter as it runs
 - Display the rewritten posts with a summary table
 - Let you download everything as a ZIP
@@ -107,7 +108,7 @@ The tool will:
 
 ## Customising the tool
 
-The prompts that control how Claude rewrites your content are in `rewriter.py`. Open it in any text editor (or VS Code) and look for `REWRITE_PROMPT` and `ANALYSIS_PROMPT`.
+The prompts that control how the model rewrites your content are in `rewriter.py`. Open it in any text editor (or VS Code) and look for `REWRITE_PROMPT` and `ANALYSIS_PROMPT`.
 
 Common things people change:
 - **Minimum word count** — find `Minimum 1,200 words` in the rewrite prompt and change the number
@@ -126,7 +127,7 @@ blog-revival-agent/
 ├── app.py                  ← Streamlit UI (layout, inputs, results display)
 ├── content_fetcher.py      ← Fetches and parses your blog post HTML
 ├── sitemap_crawler.py      ← Discovers internal pages from your sitemap
-├── rewriter.py             ← Claude prompts and API calls
+├── rewriter.py             ← Rewrite prompts and OpenRouter API calls
 ├── requirements.txt        ← Python dependencies
 └── output/                 ← Rewritten posts saved here as .md files
 ```
@@ -142,7 +143,7 @@ Your sitemap needs to be at `/sitemap.xml` or declared in `robots.txt`. WordPres
 Some sites block automated requests. Try with a different post first to confirm the tool is working. Cloudflare-protected sites may block fetches.
 
 **API key error**
-Double-check the key at [console.anthropic.com](https://console.anthropic.com) and make sure your account has a payment method added.
+Double-check the key at [openrouter.ai/keys](https://openrouter.ai/keys), ensure it is active, and verify your selected model is available to your account.
 
 **Port already in use**
 If `localhost:8501` throws an error, another Streamlit app is running. Either close it or run on a different port:

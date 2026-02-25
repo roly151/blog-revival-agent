@@ -1,6 +1,6 @@
 import json
 
-import anthropic
+from openai import OpenAI
 
 # ---------------------------------------------------------------------------
 # Prompts
@@ -93,7 +93,7 @@ ORIGINAL POST TO REWRITE:
 def _format_site_pages(site_pages: list, domain: str = "") -> str:
     """
     Format site pages for prompt injection.
-    Uses full URLs so Claude can place them directly into links.
+    Uses full URLs so the selected model can place them directly into links.
     Caps at 100 pages to avoid token overflow.
     """
     if not site_pages:
@@ -132,26 +132,50 @@ def _strip_code_fences(text: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
-# claude-sonnet-4-6 pricing (USD per token)
-_PRICE_IN  = 3.00  / 1_000_000   # $3.00 per million input tokens
-_PRICE_OUT = 15.00 / 1_000_000   # $15.00 per million output tokens
+def _extract_message_text(response) -> str:
+    """Extract assistant text from OpenAI-compatible chat completion responses."""
+    content = response.choices[0].message.content
+    if isinstance(content, str):
+        return content
+    if isinstance(content, list):
+        parts = []
+        for part in content:
+            if isinstance(part, dict):
+                parts.append(part.get("text", ""))
+            else:
+                parts.append(getattr(part, "text", ""))
+        return "".join(parts)
+    return ""
 
 
-def _usage_cost(usage) -> dict:
-    """Convert an API usage object to a cost breakdown dict."""
-    inp  = getattr(usage, "input_tokens",  0)
-    out  = getattr(usage, "output_tokens", 0)
+def _usage_cost(response) -> dict:
+    """Convert an API response usage object to a cost breakdown dict."""
+    usage = getattr(response, "usage", None)
+    inp = getattr(usage, "prompt_tokens", 0) if usage else 0
+    out = getattr(usage, "completion_tokens", 0) if usage else 0
+
+    cost = 0.0
+    for candidate in (getattr(usage, "cost", None), getattr(response, "cost", None)):
+        if candidate is None:
+            continue
+        try:
+            cost = float(candidate)
+            break
+        except (TypeError, ValueError):
+            continue
+
     return {
-        "input_tokens":  inp,
+        "input_tokens": inp,
         "output_tokens": out,
-        "cost_usd":      inp * _PRICE_IN + out * _PRICE_OUT,
+        "cost_usd": cost,
     }
 
 
 def analyze_post(
     post: dict,
     site_pages: list,
-    client: anthropic.Anthropic,
+    client: OpenAI,
+    model: str,
     domain: str = "",
 ) -> tuple[dict, dict]:
     """
@@ -166,14 +190,14 @@ def analyze_post(
         site_pages=_format_site_pages(site_pages, domain),
     )
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
+    response = client.chat.completions.create(
+        model=model,
         max_tokens=1024,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    usage = _usage_cost(message.usage)
-    raw   = _strip_code_fences(message.content[0].text)
+    usage = _usage_cost(response)
+    raw = _strip_code_fences(_extract_message_text(response))
 
     try:
         return json.loads(raw), usage
@@ -194,7 +218,8 @@ def rewrite_post(
     post: dict,
     audit: dict,
     site_pages: list,
-    client: anthropic.Anthropic,
+    client: OpenAI,
+    model: str,
     domain: str = "",
 ) -> tuple[str, dict]:
     """
@@ -208,10 +233,10 @@ def rewrite_post(
         body_text=post.get("body_text", "")[:8000],
     )
 
-    message = client.messages.create(
-        model="claude-sonnet-4-6",
+    response = client.chat.completions.create(
+        model=model,
         max_tokens=4096,
         messages=[{"role": "user", "content": prompt}],
     )
 
-    return message.content[0].text.strip(), _usage_cost(message.usage)
+    return _extract_message_text(response).strip(), _usage_cost(response)
